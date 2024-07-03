@@ -6,6 +6,10 @@ from os.path import join
 import pandas as pd
 import numpy as np
 
+# Clustering
+from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
+from sklearn.decomposition import PCA
+
 # Prediction
 from sklearn.model_selection import LearningCurveDisplay, learning_curve
 from xgboost import XGBClassifier
@@ -14,7 +18,7 @@ from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 
 # Evaluation
-from sklearn.metrics import accuracy_score, auc, roc_auc_score, roc_curve, confusion_matrix
+from sklearn.metrics import accuracy_score, auc, roc_auc_score, roc_curve, confusion_matrix, silhouette_score, davies_bouldin_score
 
 # Hyperparameter Optimisation
 import optuna
@@ -33,6 +37,7 @@ class Dataset:
         (1) df - dataframe holding data
         """
         self.df = df
+
     def combine_vectors(self, row, col1, col2):
         """
         Method to concatenate 2 vectors in 2 columns to one larger vector in one column in a dataframe
@@ -42,8 +47,22 @@ class Dataset:
         (3) col2 - column fo dataframe containing second vector to be unpacked
         """
         return np.concatenate([row[col1], row[col2]])
-    def featurise_df(self, col):
-        return np.stack(self.df[col].values)
+    
+    def featurise_df(self, name, embedding):
+        """
+        Method to featurise either the enzyme or substrate embeddings, keeping the name of the
+        enzyme or substrate, depending on user choice
+
+        (1) name - enzyme or substrate
+        (2) embedding - column containing embedding
+        """
+        df = self.df
+        df = df.drop_duplicates(subset=[name]).reset_index(drop=True)
+        df = df[[name, embedding]]
+        embeddings_df = pd.DataFrame(df[embedding].tolist(), index=df[name])
+        embeddings_df.columns = [f'embedding_{i+1}' for i in range(embeddings_df.shape[1])]
+        return embeddings_df
+    
     def featurise_train(self, df, col1, col2):
         """
         Method to create a numpy array of 2 concatenated vectors from a dataframe where each value represents
@@ -56,6 +75,7 @@ class Dataset:
         df.loc[:, (col1 + '_' + col2 + '_Combined')] = df.apply(self.combine_vectors, args = (col1, col2), axis=1)
         featurised = np.stack(df[col1 + '_' + col2 + '_Combined'].values)
         return featurised
+    
     def train_test(self, enzyme_rep, substrate_rep, train_size):
         """
         Train test split method which creates a train test split of the dataset
@@ -80,12 +100,77 @@ class Dataset:
         return X_train, y_train, X_test, y_test
     
 class Clustering:
-    def __init__(self, df):
-        self.df = df
-    def cluster(self):
-        pass
-    def pca_visualisation(self):
-        pass
+    """
+    Class representing a clustering model
+    """
+    def __init__(self, method = 'kmeans', n_clusters = 3, **kwargs):
+        """
+        Initialiser method (constructor) of clustering object. Takes parameters:
+
+        (1) method - clustering model to be used
+        (2) n_clusters - number of clusters to be used by clustering model
+        (3) kwargs - key word arguments to be input into clustering model
+        """
+        self.method = method
+        self.n_clusters = n_clusters
+        self.kwargs = kwargs
+
+    def cluster(self, df):
+        """
+        Method to execute clustering with parameters specified in constructor. Takes parameters:
+
+        (1) df - dataframe with data to cluster
+        """
+        if self.method == 'kmeans':
+            self.model = KMeans(n_clusters=self.n_clusters, **self.kwargs)
+        elif self.method == 'dbscan':
+            self.model = DBSCAN(**self.kwargs)
+        elif self.method == 'hierarchical':
+            self.model = AgglomerativeClustering(n_clusters=self.n_clusters, **self.kwargs)
+        else:
+            raise ValueError(f"Unknown method: {self.method}")
+        
+        self.labels = self.model.fit_predict(df)
+        return self.labels
+    
+    def visualise(self, df):
+        """
+        Method to visualise clusters in 2 dimensions using PCA. Takes parameters:
+
+        (1) df - dataframe with data to visualise
+        """
+        if self.labels is None:
+            raise ValueError("Data has not been clustered yet. Please call the 'cluster' method first.")
+        
+        pca = PCA(n_components=2)
+        reduced_data = pca.fit_transform(df)
+        
+        plt.figure(figsize=(10, 6))
+        scatter = plt.scatter(reduced_data[:, 0], reduced_data[:, 1], c=self.labels, cmap='viridis')
+        plt.title(f'2D PCA Visualization of {self.method} Clustering')
+        plt.xlabel('Principal Component 1')
+        plt.ylabel('Principal Component 2')
+        plt.legend(handles=scatter.legend_elements()[0], labels=set(self.labels))
+        plt.show()
+    
+    def evaluate(self, df):
+        """
+        Method to evaluate clustering executed in clusters method. Takes parameters:
+
+        (1) df - dataframe with data to visualise
+        """
+        if self.labels is None:
+            raise ValueError("Data has not been clustered yet. Please call the 'cluster' method first.")
+        
+        metrics = {}
+        if len(set(self.labels)) > 1:
+            metrics['Silhouette Score'] = silhouette_score(df, self.labels)
+            metrics['Davies-Bouldin Score'] = davies_bouldin_score(df, self.labels)
+        else:
+            metrics['Silhouette Score'] = 'undefined (only one cluster found)'
+            metrics['Davies-Bouldin Score'] = 'undefined (only one cluster found)'
+        
+        return metrics
     
 class Model:
     """
