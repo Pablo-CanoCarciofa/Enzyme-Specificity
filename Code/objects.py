@@ -30,6 +30,7 @@ class Dataset:
     """
     Class representing a dataset
     """
+
     def __init__(self, df):
         """
         Initialiser method (constructor) of dataset object. Takes parameters:
@@ -40,7 +41,7 @@ class Dataset:
 
     def combine_vectors(self, row, col1, col2):
         """
-        Method to concatenate 2 vectors in 2 columns to one larger vector in one column in a dataframe
+        Concatenates 2 vectors in 2 columns to one larger vector in one column in a dataframe
 
         (1) row - row of dataframe
         (2) col1 - column of dataframe containing first vector to be unpacked
@@ -50,7 +51,7 @@ class Dataset:
     
     def featurise_df(self, name, embedding):
         """
-        Method to featurise either the enzyme or substrate embeddings, keeping the name of the
+        Featurises either the enzyme or substrate embeddings, keeping the name of the
         enzyme or substrate, depending on user choice
 
         (1) name - enzyme or substrate
@@ -65,7 +66,7 @@ class Dataset:
     
     def featurise_train(self, df, col1, col2):
         """
-        Method to create a numpy array of 2 concatenated vectors from a dataframe where each value represents
+        Creates a numpy array of 2 concatenated vectors from a dataframe where each value represents
         a row in the dataframe
 
         (1) row - row of dataframe
@@ -90,19 +91,19 @@ class Dataset:
         self.train_size = train_size
         
         train_enzymes = np.random.choice(self.df['enzyme'].unique(), size=int(len(self.df['enzyme'].unique()) * self.train_size), replace=False)
-        train_df = self.df[self.df['enzyme'].isin(train_enzymes)].copy()
-        test_df = self.df[~self.df['enzyme'].isin(train_enzymes)].copy()
+        self.train_df = self.df[self.df['enzyme'].isin(train_enzymes)].copy()
+        self.test_df = self.df[~self.df['enzyme'].isin(train_enzymes)].copy()
 
-        X_train = self.featurise_train(train_df, enzyme_rep, substrate_rep)
-        X_test = self.featurise_train(test_df, enzyme_rep, substrate_rep)
-        y_train = train_df['active']
-        y_test = test_df['active']
-        return X_train, y_train, X_test, y_test
+        self.X_train = self.featurise_train(self.train_df, enzyme_rep, substrate_rep)
+        self.X_test = self.featurise_train(self.test_df, enzyme_rep, substrate_rep)
+        self.y_train = self.train_df['active']
+        self.y_test = self.test_df['active']
     
 class Clustering:
     """
     Class representing a clustering model
     """
+
     def __init__(self, method = 'kmeans', n_clusters = 3, **kwargs):
         """
         Initialiser method (constructor) of clustering object. Takes parameters:
@@ -117,12 +118,12 @@ class Clustering:
 
     def cluster(self, df):
         """
-        Method to execute clustering with parameters specified in constructor. Takes parameters:
+        Executes clustering on input data with parameters specified in constructor. Takes parameters:
 
         (1) df - dataframe with data to cluster
         """
         if self.method == 'kmeans':
-            self.model = KMeans(n_clusters=self.n_clusters, **self.kwargs)
+            self.model = KMeans(n_clusters=self.n_clusters, n_init = 10, **self.kwargs)
         elif self.method == 'dbscan':
             self.model = DBSCAN(**self.kwargs)
         elif self.method == 'hierarchical':
@@ -135,7 +136,7 @@ class Clustering:
     
     def visualise(self, df):
         """
-        Method to visualise clusters in 2 dimensions using PCA. Takes parameters:
+        Visualises clusters on data in 2 dimensions using PCA. Takes parameters:
 
         (1) df - dataframe with data to visualise
         """
@@ -155,7 +156,7 @@ class Clustering:
     
     def evaluate(self, df):
         """
-        Method to evaluate clustering executed in clusters method. Takes parameters:
+        Evaluates clustering executed in clusters method. Takes parameters:
 
         (1) df - dataframe with data to visualise
         """
@@ -176,25 +177,32 @@ class Model:
     """
     Class representing a machine learning model
     """
-    def __init__(self, X_train, y_train, X_test, y_test):
+
+    def __init__(self, dataset):
         """
         Initialiser method (constructor) of dataset object. Takes parameters:
+
         (1) X_train - training features
         (2) y_train - training labels
         (3) X_test - testing features
         (4) y_test - testing labels
         """
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_test = X_test
-        self.y_test = y_test
+        self.X_train = dataset.X_train
+        self.y_train = dataset.y_train
+        self.X_test = dataset.X_test
+        self.y_test = dataset.y_test
+        self.test_df = dataset.test_df
         self.model = None
         self.roc_curves = []
         self.model_name = None
 
     def tune_hyperparameters(self, model_name, n_trials=50, verbose = False):
         """
-        Hyperparameter tuning method using Optuna
+        Hyperparameter tuning method using Optuna. returns auroc as success metric. Takes parameters:
+
+        (1) model_name - model to be fitted
+        (2) n_trials - number of rounds of hyperparaneter tuning
+        (3) verbose - whether to output summaries of trials after every trial
         """
         self.model_name = model_name
         def objective(trial):
@@ -254,7 +262,12 @@ class Model:
 
     def evaluate(self, model_name='xgb', tune=False, n_trials=50, verbose = False):
         """
-        Model evaluation method - outputs accuracy, area under ROC curve, and ROC curve
+        Model evaluation method, executes hyperparameter tuning method above and outputs accuracy, 
+        area under ROC curve, and ROC curve. Takes parameters:
+
+        (1) model_name - model to be fitted
+        (2) n_trials - number of rounds of hyperparaneter tuning
+        (3) verbose - whether to output summaries of trials after every trial
         """  
         model_class = {
             'xgb': XGBClassifier,
@@ -297,7 +310,7 @@ class Model:
 
     def plot_learning_curve(self):
         """
-        Plots the learning curve for the given model without cross-validation
+        Plots the learning curve for the given model
         """
         #train_sizes, train_scores, test_scores = learning_curve(self.model, self.X_train, self.y_train)
         display = LearningCurveDisplay.from_estimator(self.model, np.concatenate([self.X_train, self.X_test]), np.concatenate([self.y_train, self.y_test]))
@@ -306,7 +319,8 @@ class Model:
     
     def plot_roc_comparison(self):
         """
-        Plots ROC curve comparison across different hyperparameters
+        Plots ROC curve comparison across different hyperparameters, once hyperparameter tuning
+        method has been called
         """
         plt.figure()
 
@@ -319,3 +333,20 @@ class Model:
         plt.title('ROC Curve Comparison')
         plt.legend(loc="lower right")
         plt.show()
+    
+    def get_wrongly_classified(self):
+        """
+        Returns a DataFrame of all the wrongly classified rows after model evaluation. Takes parameter:
+        """
+        if self.model is None:
+            raise ValueError("The model has not been trained or evaluated yet.")
+        
+        y_pred = self.model.predict(self.X_test)
+        misclassified_indices = self.y_test != y_pred
+        test_length = len(self.test_df)
+        misclassified_length = len(misclassified_indices)
+        padded_misclassified = np.pad(misclassified_indices, (0, test_length - misclassified_length), constant_values = False)
+        filtered_df = self.test_df[padded_misclassified]
+        filtered_df = filtered_df.rename(columns = {'active' : 'true_label'})
+        filtered_df['predicted_label'] = 1 - filtered_df['true_label']
+        return filtered_df
