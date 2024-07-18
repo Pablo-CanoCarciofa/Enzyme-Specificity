@@ -57,11 +57,18 @@ class Dataset:
         (1) name - enzyme or substrate
         (2) embedding - column containing embedding
         """
-        df = self.df
-        df = df.drop_duplicates(subset=[name]).reset_index(drop=True)
-        df = df[[name, embedding]]
-        embeddings_df = pd.DataFrame(df[embedding].tolist(), index=df[name])
-        embeddings_df.columns = [f'embedding_{i+1}' for i in range(embeddings_df.shape[1])]
+        if (name != 'both') and (embedding != 'both'):
+            df = self.df
+            df = df.drop_duplicates(subset=[name]).reset_index(drop=True)
+            df = df[[name, embedding]]
+            embeddings_df = pd.DataFrame(df[embedding].tolist(), index=df[name])
+            embeddings_df.columns = [f'embedding_{i+1}' for i in range(embeddings_df.shape[1])]
+        else:
+            df = self.df
+            df = df[['enzyme', 'substrate', 'ESM1b', 'fingerprint', 'active']]
+            esm1b_df = pd.DataFrame(df['ESM1b'].tolist(), index=df.index).add_prefix('ESM1b_')
+            fingerprint_df = pd.DataFrame(df['fingerprint'].tolist(), index=df.index).add_prefix('fingerprint_')
+            embeddings_df = pd.concat([df[['enzyme', 'substrate', 'active']], esm1b_df, fingerprint_df], axis=1)
         return embeddings_df
     
     def featurise_train(self, df, col1, col2):
@@ -284,16 +291,24 @@ class Model:
             self.model = model_class()
             
         self.model.fit(self.X_train, self.y_train)
+
+        if hasattr(self.model, "predict_proba"):
+            y_pred_prob = self.model.predict_proba(self.X_test)[:, 1]
+        elif hasattr(self.model, "decision_function"):
+            y_pred_prob = self.model.decision_function(self.X_test)
+        else:
+            raise ValueError(f"Model {model_name} does not have predict_proba or decision_function method.")
+        
         y_pred = self.model.predict(self.X_test)
         accuracy = accuracy_score(self.y_test, y_pred)
-        area_under_roc = roc_auc_score(self.y_test, y_pred)
+        area_under_roc = roc_auc_score(self.y_test, y_pred_prob)
         confuse = confusion_matrix(self.y_test, y_pred)
 
         print(f"Accuracy: {accuracy}")
         print(f"Area Under ROC Curve: {area_under_roc}")
         print('Confusion Matrix:\n', confuse)
 
-        fpr, tpr, thresholds = roc_curve(self.y_test, y_pred, pos_label=1)
+        fpr, tpr, thresholds = roc_curve(self.y_test, y_pred_prob, pos_label=1)
         plt.figure()
         lw = 2
         plt.plot(fpr, tpr, color="darkorange", lw=lw,
