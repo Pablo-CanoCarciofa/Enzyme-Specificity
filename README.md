@@ -8,3 +8,5 @@ It contains 6 main files:
 4. Examples.ipynb - this is where ESP is tested with some out-of-sample testing from a few salient enzyme examples from various industries
 5. objects.py - this is where classes are defined for use in Prediction.ipynb, this makes the code much easier to understand and much more reproducible
 6. extract.py - this is code taken from Kroll et al. (2023) used to feed amino acid sequences into ESM models to create enzyme representations
+
+Data is not provided with this repository, since it is very large in size, and in the process of creating enzyme representations, many .pt files were created, so it cannot be uploaded to GitHub.
