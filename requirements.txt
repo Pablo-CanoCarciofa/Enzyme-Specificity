@@ -1,0 +1,2 @@
+brendapyrser==0.0.2
+torch==2.3.1

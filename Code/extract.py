@@ -1,4 +1,4 @@
-#!/usr/bin/env python3 -u
+# This code is taken from https://github.com/AlexanderKroll/ESP/blob/main/notebooks_and_code/extract.py
 # Copyright (c) Facebook, Inc. and its affiliates.
 #
 # This source code is licensed under the MIT license found in the
